@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RC 樓板設計檢核表單</title>
+  
+  <!-- 引入 Tailwind CSS 進行排版 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- 引入 React 與 ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  
+  <!-- 引入 Babel 以在瀏覽器中解析 JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6; }
+    /* 隱藏 number input 的上下箭頭 */
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
+
+    /* 列印專屬樣式 */
+    @media print {
+      body {
+        background-color: white !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      * { box-shadow: none !important; }
+      .print-hidden { display: none !important; }
+      .slab-card-container {
+        page-break-inside: avoid;
+        break-inside: avoid;
+        margin-bottom: 20px !important;
+        border-color: #e5e7eb !important;
+      }
+      input, select { border-color: #d1d5db !important; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+
+    // ---------------------------------------------------------------------------
+    // 圖示元件
+    // ---------------------------------------------------------------------------
+    const SvgIcon = ({ className, children }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        {children}
+      </svg>
+    );
+    const Calculator = ({className}) => <SvgIcon className={className}><rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></SvgIcon>;
+    const Plus = ({className}) => <SvgIcon className={className}><path d="M5 12h14"/><path d="M12 5v14"/></SvgIcon>;
+    const Trash2 = ({className}) => <SvgIcon className={className}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></SvgIcon>;
+    const Layers = ({className}) => <SvgIcon className={className}><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 12 12 17 22 12"/><polyline points="2 17 12 22 22 17"/></SvgIcon>;
+    const Weight = ({className}) => <SvgIcon className={className}><circle cx="12" cy="5" r="3"/><path d="M6.5 8a2 2 0 0 0-1.905 1.46L2.1 18.5A2 2 0 0 0 4 21h16a2 2 0 0 0 1.925-2.54L19.4 9.46A2 2 0 0 0 17.5 8Z"/></SvgIcon>;
+    const Save = ({className}) => <SvgIcon className={className}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></SvgIcon>;
+    const FolderOpen = ({className}) => <SvgIcon className={className}><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></SvgIcon>;
+    const FileCheck = ({className}) => <SvgIcon className={className}><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m9 15 2 2 4-4"/></SvgIcon>;
+    const Printer = ({className}) => <SvgIcon className={className}><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></SvgIcon>;
+
+    // 鋼筋斷面積對照表 (cm^2)
+    const REBAR_AREAS = { '10': 0.71, '13': 1.27, '16': 1.99, '19': 2.87, '22': 3.87, '25': 5.07 };
+
+    // 雙向板彎矩係數 C 表 (m=0.50 ~ 1.00，間隔0.05，對應 5 種邊界條件的 [-M, +M])
+    // 條件順序：0.內格間 1.一邊不連續 2.二邊不連續 3.三邊不連續 4.單獨格間
+    const M_COEFF_TABLE = [
+      { m: 0.50, vals: [[0.083, 0.062], [0.085, 0.064], [0.090, 0.068], [0.098, 0.074], [0.055, 0.083]] },
+      { m: 0.55, vals: [[0.073, 0.055], [0.077, 0.058], [0.084, 0.064], [0.094, 0.071], [0.054, 0.082]] },
+      { m: 0.60, vals: [[0.063, 0.047], [0.069, 0.052], [0.078, 0.059], [0.090, 0.068], [0.053, 0.080]] },
+      { m: 0.65, vals: [[0.059, 0.044], [0.066, 0.050], [0.075, 0.057], [0.086, 0.065], [0.050, 0.076]] },
+      { m: 0.70, vals: [[0.055, 0.041], [0.062, 0.047], [0.071, 0.054], [0.082, 0.062], [0.047, 0.072]] },
+      { m: 0.75, vals: [[0.052, 0.039], [0.059, 0.044], [0.068, 0.051], [0.078, 0.059], [0.045, 0.068]] },
+      { m: 0.80, vals: [[0.048, 0.036], [0.055, 0.041], [0.064, 0.048], [0.074, 0.056], [0.043, 0.064]] },
+      { m: 0.85, vals: [[0.044, 0.033], [0.052, 0.039], [0.061, 0.046], [0.070, 0.053], [0.041, 0.061]] },
+      { m: 0.90, vals: [[0.040, 0.030], [0.048, 0.036], [0.057, 0.043], [0.066, 0.050], [0.038, 0.057]] },
+      { m: 0.95, vals: [[0.037, 0.028], [0.045, 0.034], [0.053, 0.040], [0.062, 0.047], [0.036, 0.054]] },
+      { m: 1.00, vals: [[0.033, 0.025], [0.041, 0.031], [0.049, 0.037], [0.058, 0.044], [0.033, 0.050]] }
+    ];
+
+    // 線性內插函數取得彎矩係數
+    const getCoefficients = (m, conditionIndex) => {
+      if (m <= 0.5) return M_COEFF_TABLE[0].vals[conditionIndex];
+      if (m >= 1.0) return M_COEFF_TABLE[10].vals[conditionIndex];
+      
+      const m_adj = Math.round(m * 1000) / 1000;
+      let lowerIdx = Math.floor((m_adj - 0.5) / 0.05);
+      if(lowerIdx > 9) lowerIdx = 9;
+      const upperIdx = lowerIdx + 1;
+      
+      const lowerRow = M_COEFF_TABLE[lowerIdx];
+      const upperRow = M_COEFF_TABLE[upperIdx];
+      const interpRatio = (m_adj - lowerRow.m) / 0.05;
+
+      const neg = lowerRow.vals[conditionIndex][0] + interpRatio * (upperRow.vals[conditionIndex][0] - lowerRow.vals[conditionIndex][0]);
+      const pos = lowerRow.vals[conditionIndex][1] + interpRatio * (upperRow.vals[conditionIndex][1] - lowerRow.vals[conditionIndex][1]);
+      
+      return [neg, pos];
+    };
+
+    // 緊湊型輸入元件
+    const CompactInput = ({ label, value, onChange, width = "w-16" }) => (
+      <div className="flex flex-col">
+        <label className="text-[11px] text-gray-400 mb-0.5 font-medium">{label}</label>
+        <input
+          type="number"
+          value={value}
+          onChange={e => onChange(e.target.value ? parseFloat(e.target.value) : '')}
+          className={`${width} rounded border border-gray-400 p-1 text-sm bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all`}
+        />
+      </div>
+    );
+
+    // ---------------------------------------------------------------------------
+    // 單一樓板橫向計算卡片
+    // ---------------------------------------------------------------------------
+    const SlabCard = ({ slab, onUpdate, onRemove, index }) => {
+      
+      // 自動判斷與計算
+      const analysis = useMemo(() => {
+        const L = Math.max(Number(slab.longSide), Number(slab.shortSide)) || 1;
+        const S = Math.min(Number(slab.longSide), Number(slab.shortSide)) || 1;
+        const t = Number(slab.thickness) || 1;
+        const ratio = L / S;
+        const m_val = S / L; // 雙向板係數 m
+        const fc = Number(slab.fc) || 280;
+        const fy = Number(slab.fy) || 4200;
+        
+        // 1. 基本版型與最小鋼筋量
+        const isOneWay = ratio > 2;
+        const slabType = isOneWay ? '單向板' : '雙向板';
+        const minRho = fy === 4200 ? 0.0018 : 0.0020;
+        const minAs = minRho * 100 * t;
+
+        // 2. 最小板厚檢核
+        let minThickness = 0;
+        let minThicknessMsg = "";
+        let supportLabel = "";
+        let divisor = 24;
+        const beta = L / S;
+
+        if (isOneWay) {
+          const type = slab.supportType || 'l/24';
+          if (type === 'l/20') { divisor = 20; supportLabel = '簡支'; }
+          else if (type === 'l/24') { divisor = 24; supportLabel = '一端連續'; }
+          else if (type === 'l/28') { divisor = 28; supportLabel = '兩端連續'; }
+          else if (type === 'l/10') { divisor = 10; supportLabel = '懸臂'; }
+          minThickness = S / divisor;
+        } else {
+          const afm = slab.alphaFm !== '' && slab.alphaFm !== undefined ? Number(slab.alphaFm) : 2.5;
+          if (afm <= 0.2) {
+            minThicknessMsg = "適用 §8.3.1.1 節 (無梁板)";
+            minThickness = 0;
+          } else if (afm <= 2.0) {
+            const calc = (L * (0.8 + fy / 14000)) / (36 + 5 * beta * (afm - 0.2));
+            minThickness = Math.max(calc, 12.5);
+          } else {
+            const calc = (L * (0.8 + fy / 14000)) / (36 + 9 * beta);
+            minThickness = Math.max(calc, 9.0);
+          }
+        }
+        const isThicknessOk = minThickness > 0 ? t >= minThickness : true;
+
+        // 3. 載重計算 Wu
+        const selfWeight = (t / 100) * 2400; 
+        const totalDL = selfWeight + Number(slab.sdl);
+        const wu = (1.2 * totalDL) + (1.6 * Number(slab.ll)); 
+
+        // 4. 彎矩分配計算 (M = C * w * S^2)
+        const S_m = S / 100;
+        const wS2 = wu * Math.pow(S_m, 2);
+        
+        let Mu_s_neg = 0, Mu_s_pos = 0, Mu_l_neg = 0, Mu_l_pos = 0;
+        let Cs_neg = 0, Cs_pos = 0, Cl_neg = 0, Cl_pos = 0;
+
+        if (isOneWay) {
+          // 單向板保守假設主要跨距 M=wl^2/8
+          Mu_s_pos = wS2 / 8;
+          Mu_s_neg = Mu_s_pos; // 單向板未輸入邊界，保守視為相同
+          Mu_l_pos = 0;
+          Mu_l_neg = 0;
+        } else {
+          const cond = parseInt(slab.twoWayCondition || '0');
+          // 短向係數依 m 取內插
+          const [cs_n, cs_p] = getCoefficients(m_val, cond);
+          // 長向係數永遠視為 m=1.00 ("長向"列)
+          const [cl_n, cl_p] = getCoefficients(1.0, cond); 
+
+          Cs_neg = cs_n; Cs_pos = cs_p;
+          Cl_neg = cl_n; Cl_pos = cl_p;
+
+          Mu_s_neg = Cs_neg * wS2;
+          Mu_s_pos = Cs_pos * wS2;
+          Mu_l_neg = Cl_neg * wS2;
+          Mu_l_pos = Cl_pos * wS2;
+        }
+
+        // 5. 抗彎鋼筋量計算 As,flex
+        const phi = 0.9;
+        const b = 100;
+        const cover = 2.5; 
+        const ds = Math.max(t - cover - 0.6, 1);       // 短向有效深度
+        const dl = Math.max(t - cover - 1.3 - 0.6, 1); // 長向有效深度
+
+        let sectionTooSmall = false;
+
+        const calcFlexAs = (Mu, d) => {
+          if (Mu === 0) return 0;
+          const Rn = (Mu * 100) / (phi * b * d * d); 
+          const underRoot = 1 - (2 * Rn) / (0.85 * fc);
+          if (underRoot < 0) {
+            sectionTooSmall = true;
+            return 99.99; 
+          }
+          const rho = (0.85 * fc / fy) * (1 - Math.sqrt(underRoot));
+          return rho * b * d;
+        };
+
+        const asFlex_s_neg = calcFlexAs(Mu_s_neg, ds);
+        const asFlex_s_pos = calcFlexAs(Mu_s_pos, ds);
+        const asFlex_l_neg = calcFlexAs(Mu_l_neg, dl);
+        const asFlex_l_pos = calcFlexAs(Mu_l_pos, dl);
+
+        // 6. 最終需求配筋量 As,req (四個方位各自判斷)
+        const reqAs_s_neg = Math.max(asFlex_s_neg, minAs).toFixed(2);
+        const reqAs_s_pos = Math.max(asFlex_s_pos, minAs).toFixed(2);
+        const reqAs_l_neg = isOneWay ? minAs.toFixed(2) : Math.max(asFlex_l_neg, minAs).toFixed(2);
+        const reqAs_l_pos = isOneWay ? minAs.toFixed(2) : Math.max(asFlex_l_pos, minAs).toFixed(2);
+
+        // 改良：加入防呆，若號數不存在於表格中則回傳 0
+        const calcAs = (size, sp) => (sp && size && REBAR_AREAS[size] ? (REBAR_AREAS[size] * (100 / sp)).toFixed(2) : 0);
+
+        return {
+          ratio: ratio.toFixed(2), m_val, slabType, isOneWay, minAs: minAs.toFixed(2),
+          minThickness, minThicknessMsg, supportLabel, divisor, isThicknessOk, beta,
+          selfWeight: selfWeight.toFixed(0), wu: wu.toFixed(0), wS2,
+          Cs_neg, Cs_pos, Cl_neg, Cl_pos,
+          Mu_s_neg, Mu_s_pos, Mu_l_neg, Mu_l_pos, ds, dl, 
+          asFlex_s_neg, asFlex_s_pos, asFlex_l_neg, asFlex_l_pos,
+          reqAs_s_neg, reqAs_s_pos, reqAs_l_neg, reqAs_l_pos, sectionTooSmall,
+          asSTop: calcAs(slab.stSize, slab.stSpacing),
+          asSBot: calcAs(slab.sbSize, slab.sbSpacing),
+          asLTop: calcAs(slab.ltSize, slab.ltSpacing),
+          asLBot: calcAs(slab.lbSize, slab.lbSpacing),
+        };
+      }, [slab]);
+
+      // 鋼筋選擇區塊
+      const RebarSelector = ({ label, size, spacing, setSize, setSpacing, reqAs, providedAs, isMain }) => {
+        const isPass = Number(providedAs) >= Number(reqAs);
+        return (
+          <div className={`p-2.5 rounded-lg border ${isMain ? 'bg-blue-50/50 border-blue-200' : 'bg-gray-50 border-gray-200'} flex flex-col gap-2`}>
+            <div className="flex justify-between items-center">
+              <h4 className={`font-semibold text-sm flex items-center gap-1.5 ${isMain ? 'text-blue-800' : 'text-gray-700'}`}>
+                <span className={`w-1.5 h-3 rounded-full ${isMain ? 'bg-blue-500' : 'bg-green-500'}`}></span>
+                {label}
+              </h4>
+              {isPass ? 
+                <span className="text-emerald-700 font-bold text-[10px] bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200">OK</span> : 
+                <span className="text-red-600 font-bold text-[10px] bg-red-100 px-1.5 py-0.5 rounded border border-red-200">不足</span>
+              }
+            </div>
+            <div className="flex gap-1.5 items-center">
+              <select value={size} onChange={(e) => setSize(e.target.value)} className="w-16 rounded border-gray-300 bg-white p-1 text-sm border shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all">
+                {Object.keys(REBAR_AREAS).map((s) => <option key={s} value={s}>D{s}</option>)}
+              </select>
+              <span className="text-gray-400 font-bold text-xs">@</span>
+              <input type="number" value={spacing} onChange={(e) => setSpacing(e.target.value ? parseFloat(e.target.value) : '')} className="w-16 rounded border-gray-300 bg-white p-1 text-sm border shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none text-center transition-all" />
+              <span className="text-[10px] text-gray-500">cm</span>
+            </div>
+            <div className="flex justify-between items-center text-[11px] font-medium border-t border-gray-200/80 pt-1.5 mt-0.5">
+              <div className="flex flex-col">
+                <span className="text-gray-500 text-[9px] leading-none mb-0.5">需求 As,req</span>
+                <span className="text-gray-700">{reqAs} <span className="text-[9px] font-normal">cm²/m</span></span>
+              </div>
+              <div className="flex flex-col items-end">
+                <span className="text-gray-500 text-[9px] leading-none mb-0.5">配置 As,prov</span>
+                <span className={isPass ? 'text-blue-700 font-bold' : 'text-red-600 font-bold'}>
+                  {providedAs} <span className="text-[9px] font-normal">cm²/m</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      // 斷面示意圖
+      const SlabCrossSection = () => {
+        const t = Number(slab.thickness) || 15;
+        const scale = 140 / Math.max(t, 20); 
+        const width = 280;
+        const height = t * scale;
+        const startY = 20;
+        const cover = 2.5 * scale;
+
+        const drawDots = (spacingCm, yPos, color) => {
+          const spacingPx = Math.max((Number(spacingCm) || 15) * scale * 0.5, 10);
+          const dots = [];
+          for (let x = 20; x < width - 20; x += spacingPx) {
+            dots.push(<circle key={x} cx={x} cy={yPos} r={3.5} fill={color} stroke="#fff" strokeWidth="1" />);
+          }
+          return <g>{dots}</g>;
+        };
+
+        return (
+          <div className="flex flex-col items-center justify-center h-full w-full bg-gray-50 rounded-lg border border-gray-200 p-2">
+             <div className="w-full flex justify-center items-center py-2">
+                <svg viewBox={`0 0 ${width} ${height + 40}`} className="w-full max-w-[240px] drop-shadow-sm">
+                   <rect x="0" y={startY} width={width} height={height} fill="#e5e7eb" stroke="#9ca3af" strokeWidth="1.5" rx="2" />
+                   <line x1="5" y1={startY + cover + 4} x2={width - 5} y2={startY + cover + 4} stroke="#10b981" strokeWidth="2.5" opacity="0.8" />
+                   {drawDots(slab.stSpacing, startY + cover, "#3b82f6")}
+                   <line x1="5" y1={startY + height - cover - 4} x2={width - 5} y2={startY + height - cover - 4} stroke="#10b981" strokeWidth="2.5" opacity="0.8" />
+                   {drawDots(slab.sbSpacing, startY + height - cover, "#3b82f6")}
+                </svg>
+             </div>
+             <div className="text-[11px] text-gray-600 mt-1 text-center w-full px-2">
+                <div className="font-semibold text-gray-800 mb-1 border-b border-gray-200 pb-1 flex justify-center items-center gap-2">
+                  板厚 t = {t} cm 
+                  {analysis.isThicknessOk ? <span className="text-emerald-600 bg-emerald-100 px-1 rounded text-[10px]">厚度OK</span> : <span className="text-red-600 bg-red-100 px-1 rounded text-[10px]">厚度不足</span>}
+                </div>
+                <div className="grid grid-cols-2 gap-x-2 text-left mt-1">
+                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>短向(外):</span>
+                  <span className="text-blue-700 font-bold text-right">D{slab.stSize}@{slab.stSpacing} / D{slab.sbSize}@{slab.sbSpacing}</span>
+                  <span className="flex items-center gap-1 mt-0.5"><span className="w-2.5 h-1 bg-green-500"></span>長向(內):</span>
+                  <span className="text-green-700 font-bold text-right mt-0.5">D{slab.ltSize}@{slab.ltSpacing} / D{slab.lbSize}@{slab.lbSpacing}</span>
+                </div>
+             </div>
+          </div>
+        );
+      };
+
+      return (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6 slab-card-container">
+          <div className="bg-gray-800 px-4 py-2.5 flex flex-wrap justify-between items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Layers className="text-blue-400 w-4 h-4" />
+              <input 
+                type="text" 
+                value={slab.name} 
+                onChange={(e) => onUpdate(slab.id, 'name', e.target.value)}
+                className="bg-transparent text-white font-bold border-b border-transparent hover:border-gray-500 focus:border-blue-400 px-1 py-0.5 focus:outline-none w-32"
+              />
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-3 flex-1 justify-end">
+              <div className="flex items-center gap-2 bg-gray-700/50 p-1.5 rounded-lg border border-gray-600">
+                 {analysis.isOneWay ? (
+                   <div className="flex flex-col">
+                     <label className="text-[11px] text-gray-400 mb-0.5 font-medium">支承條件(單向)</label>
+                     <select 
+                       value={slab.supportType || 'l/24'} 
+                       onChange={(e) => onUpdate(slab.id, 'supportType', e.target.value)}
+                       className="w-24 rounded border border-gray-400 p-1 text-[11px] bg-white text-gray-900 shadow-sm focus:border-blue-500 outline-none cursor-pointer"
+                     >
+                       <option value="l/20">簡支 (l/20)</option>
+                       <option value="l/24">一端連續 (l/24)</option>
+                       <option value="l/28">兩端連續 (l/28)</option>
+                       <option value="l/10">懸臂 (l/10)</option>
+                     </select>
+                   </div>
+                 ) : (
+                   <div className="flex gap-2">
+                     <div className="flex flex-col">
+                       <label className="text-[11px] text-gray-400 mb-0.5 font-medium">邊界條件(雙向)</label>
+                       <select 
+                         value={slab.twoWayCondition || '0'} 
+                         onChange={(e) => onUpdate(slab.id, 'twoWayCondition', e.target.value)}
+                         className="w-24 rounded border border-gray-400 p-1 text-[11px] bg-white text-gray-900 shadow-sm focus:border-blue-500 outline-none cursor-pointer"
+                       >
+                         <option value="0">內格間</option>
+                         <option value="1">一邊不連續</option>
+                         <option value="2">二邊不連續</option>
+                         <option value="3">三邊不連續</option>
+                         <option value="4">單獨格間</option>
+                       </select>
+                     </div>
+                     <CompactInput label="αfm (梁勁度)" value={slab.alphaFm} onChange={(v) => onUpdate(slab.id, 'alphaFm', v)} width="w-16" />
+                   </div>
+                 )}
+              </div>
+
+              <div className="flex items-center gap-2 bg-gray-700/50 p-1.5 rounded-lg border border-gray-600">
+                 <CompactInput label="f'c" value={slab.fc} onChange={(v) => onUpdate(slab.id, 'fc', v)} width="w-14" />
+                 <CompactInput label="fy" value={slab.fy} onChange={(v) => onUpdate(slab.id, 'fy', v)} width="w-16" />
+              </div>
+              
+              <div className="flex items-center gap-2 bg-gray-700/50 p-1.5 rounded-lg border border-gray-600">
+                 <CompactInput label="L(cm)" value={slab.longSide} onChange={(v) => onUpdate(slab.id, 'longSide', v)} width="w-14" />
+                 <CompactInput label="S(cm)" value={slab.shortSide} onChange={(v) => onUpdate(slab.id, 'shortSide', v)} width="w-14" />
+                 <CompactInput label="t(cm)" value={slab.thickness} onChange={(v) => onUpdate(slab.id, 'thickness', v)} width="w-12" />
+              </div>
+
+              <div className="flex items-center gap-2 bg-gray-700/50 p-1.5 rounded-lg border border-gray-600">
+                 <CompactInput label="SDL(kg)" value={slab.sdl} onChange={(v) => onUpdate(slab.id, 'sdl', v)} width="w-14" />
+                 <CompactInput label="LL(kg)" value={slab.ll} onChange={(v) => onUpdate(slab.id, 'll', v)} width="w-14" />
+              </div>
+
+              {index > 0 && (
+                <button onClick={() => onRemove(slab.id)} className="text-red-400 hover:text-red-300 p-1 ml-1 transition-colors print-hidden" title="刪除樓板">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="p-4">
+            <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-lg text-xs text-slate-700 space-y-3 mb-5 shadow-sm">
+               <div className="font-bold text-slate-800 border-b border-slate-200 pb-1.5 mb-1.5 flex items-center gap-1.5 text-sm">
+                 <FileCheck className="w-4 h-4 text-blue-600"/> 
+                 規範檢核與 As,req 計算書 
+               </div>
+               
+               <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-4">
+                 <div className="space-y-3">
+                   <div className="flex items-start gap-2.5">
+                     <span className="bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded font-bold">1</span>
+                     <div className="flex-1">
+                       <div className="font-semibold text-purple-900 mb-0.5">最小板厚檢核 h_min</div>
+                       <div className="text-slate-600 bg-white px-2 py-1.5 rounded border border-slate-100 w-full">
+                         {analysis.isOneWay ? (
+                            <>
+                              <div className="mb-0.5">依據 §7.3.1.1 ({analysis.supportLabel})，Span l = {slab.shortSide} cm</div>
+                              <div>h_min = {slab.shortSide} / {analysis.divisor} = <span className="font-bold text-slate-800">{analysis.minThickness.toFixed(1)}</span> cm</div>
+                            </>
+                         ) : (
+                            <>
+                              <div className="mb-0.5">依據 §8.3.1.2，αfm = {slab.alphaFm ?? 2.5}, β = {analysis.beta.toFixed(2)}, ln = {slab.longSide} cm</div>
+                              <div>
+                                {analysis.minThicknessMsg ? analysis.minThicknessMsg : 
+                                 `h_min = max(公式計算, ${slab.alphaFm <= 2.0 ? '12.5' : '9.0'}) = `}
+                                {!analysis.minThicknessMsg && <span className="font-bold text-slate-800">{analysis.minThickness.toFixed(1)} cm</span>}
+                              </div>
+                            </>
+                         )}
+                         <div className={`mt-1 font-bold ${analysis.isThicknessOk ? 'text-emerald-600' : 'text-red-600'}`}>
+                           ↳ 提供板厚 t = {slab.thickness} cm ({analysis.isThicknessOk ? '符合規範' : '不符規範，請加厚'})
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+
+                   <div className="flex items-start gap-2.5">
+                     <span className="bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-bold">2</span>
+                     <div className="flex-1">
+                       <div className="font-semibold text-blue-900 mb-0.5">設計載重 Wu</div>
+                       <div className="text-slate-600 bg-white px-2 py-1 rounded border border-slate-100 inline-block w-full">
+                         1.2 × (自重 {analysis.selfWeight} + SDL {slab.sdl || 0}) + 1.6 × (LL {slab.ll || 0}) <br/>
+                         = <span className="text-blue-700 font-bold text-sm">{analysis.wu}</span> kgf/m²
+                       </div>
+                     </div>
+                   </div>
+                   
+                   <div className="flex items-start gap-2.5">
+                     <span className="bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-bold">3</span>
+                     <div className="flex-1">
+                       <div className="font-semibold text-blue-900 mb-0.5">最大彎矩分配 Mu (M = C × W × S²)</div>
+                       <div className="text-slate-600 bg-white px-2 py-1.5 rounded border border-slate-100 w-full">
+                         {analysis.isOneWay ? (
+                           <>
+                             <div className="mb-1"><span className="font-semibold text-yellow-700 bg-yellow-100 px-1 rounded">單向板</span> 長向不分配載重</div>
+                             <div>保守短向 Mu = {analysis.wu} × {(slab.shortSide/100).toFixed(2)}² / 8 = <span className="font-bold text-slate-800">{analysis.Mu_s_pos.toFixed(0)}</span> kgf-m/m</div>
+                           </>
+                         ) : (
+                           <>
+                             <div className="mb-1">
+                                <span className="font-semibold text-indigo-700 bg-indigo-100 px-1 rounded">雙向板彎矩係數分配</span>
+                                <span className="ml-2 font-medium">m = S/L = {analysis.m_val.toFixed(2)}</span>
+                             </div>
+                             <div className="grid grid-cols-2 gap-2 mt-2">
+                               <div>
+                                  <div className="font-semibold text-slate-700 border-b pb-0.5 mb-1">短向 (S)</div>
+                                  <div>-M = {analysis.Cs_neg.toFixed(3)} × wS² = <span className="font-bold">{analysis.Mu_s_neg.toFixed(0)}</span> kgf-m</div>
+                                  <div>+M = {analysis.Cs_pos.toFixed(3)} × wS² = <span className="font-bold">{analysis.Mu_s_pos.toFixed(0)}</span> kgf-m</div>
+                               </div>
+                               <div>
+                                  <div className="font-semibold text-slate-700 border-b pb-0.5 mb-1">長向 (L)</div>
+                                  <div>-M = {analysis.Cl_neg.toFixed(3)} × wS² = <span className="font-bold">{analysis.Mu_l_neg.toFixed(0)}</span> kgf-m</div>
+                                  <div>+M = {analysis.Cl_pos.toFixed(3)} × wS² = <span className="font-bold">{analysis.Mu_l_pos.toFixed(0)}</span> kgf-m</div>
+                               </div>
+                             </div>
+                           </>
+                         )}
+                       </div>
+                     </div>
+                   </div>
+                 </div>
+                 
+                 <div className="space-y-3">
+                   <div className="flex items-start gap-2.5">
+                     <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">4</span>
+                     <div className="flex-1">
+                       <div className="font-semibold text-emerald-900 flex justify-between">
+                         <span>抗彎需求 As,flex</span>
+                         <span className="text-[10px] text-emerald-700 font-normal">保護層=2.5cm, d_s={analysis.ds.toFixed(1)}cm, d_l={analysis.dl.toFixed(1)}cm, φ=0.9</span>
+                       </div>
+                       <div className="text-slate-600 bg-white px-2 py-1.5 rounded border border-slate-100 w-full mt-0.5">
+                         {analysis.sectionTooSmall ? (
+                           <div className="text-red-600 font-bold">⚠️ 板厚不足，混凝土抗壓側應力超限！請加厚樓板。</div>
+                         ) : (
+                           <>
+                             <div className="grid grid-cols-2 gap-2 mt-1">
+                               <div>
+                                  <div className="font-semibold text-slate-700 border-b pb-0.5 mb-1">短向 (S)</div>
+                                  <div>頂層 = <span className="font-bold">{analysis.asFlex_s_neg.toFixed(2)}</span> cm²/m</div>
+                                  <div>底層 = <span className="font-bold">{analysis.asFlex_s_pos.toFixed(2)}</span> cm²/m</div>
+                               </div>
+                               {!analysis.isOneWay && (
+                                 <div>
+                                    <div className="font-semibold text-slate-700 border-b pb-0.5 mb-1">長向 (L)</div>
+                                    <div>頂層 = <span className="font-bold">{analysis.asFlex_l_neg.toFixed(2)}</span> cm²/m</div>
+                                    <div>底層 = <span className="font-bold">{analysis.asFlex_l_pos.toFixed(2)}</span> cm²/m</div>
+                                 </div>
+                               )}
+                             </div>
+                           </>
+                         )}
+                       </div>
+                     </div>
+                   </div>
+
+                   <div className="flex items-start gap-2.5">
+                     <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">5</span>
+                     <div className="flex-1">
+                       <div className="font-semibold text-emerald-900 flex justify-between">
+                         <span>最終設計需求 As,req</span>
+                         <span className="text-[10px] text-emerald-700 font-normal">取 max(As,flex, 最小鋼筋 {analysis.minAs})</span>
+                       </div>
+                       <div className="text-slate-600 bg-emerald-50 px-2 py-1.5 rounded border border-emerald-100 w-full mt-0.5 font-medium">
+                         <div className="grid grid-cols-2 gap-4">
+                            <div>
+                               <div className="font-semibold text-blue-900 mb-1 border-b border-blue-100">短向 As,req</div>
+                               <div className="flex justify-between items-center text-xs">
+                                 <span>頂層(-): <span className="text-blue-700 font-bold text-sm">{analysis.reqAs_s_neg}</span></span>
+                                 <span className="text-[9px] font-normal">{Number(analysis.asFlex_s_neg) > Number(analysis.minAs) ? '(抗彎)' : '(溫度)'}</span>
+                               </div>
+                               <div className="flex justify-between items-center text-xs">
+                                 <span>底層(+): <span className="text-blue-700 font-bold text-sm">{analysis.reqAs_s_pos}</span></span>
+                                 <span className="text-[9px] font-normal">{Number(analysis.asFlex_s_pos) > Number(analysis.minAs) ? '(抗彎)' : '(溫度)'}</span>
+                               </div>
+                            </div>
+                            <div>
+                               <div className="font-semibold text-blue-900 mb-1 border-b border-blue-100">長向 As,req</div>
+                               {analysis.isOneWay ? (
+                                  <div className="text-xs text-gray-500 mt-2">單向板配溫度鋼筋: <span className="text-blue-700 font-bold text-sm">{analysis.minAs}</span></div>
+                               ) : (
+                                  <>
+                                     <div className="flex justify-between items-center text-xs">
+                                       <span>頂層(-): <span className="text-blue-700 font-bold text-sm">{analysis.reqAs_l_neg}</span></span>
+                                       <span className="text-[9px] font-normal">{Number(analysis.asFlex_l_neg) > Number(analysis.minAs) ? '(抗彎)' : '(溫度)'}</span>
+                                     </div>
+                                     <div className="flex justify-between items-center text-xs">
+                                       <span>底層(+): <span className="text-blue-700 font-bold text-sm">{analysis.reqAs_l_pos}</span></span>
+                                       <span className="text-[9px] font-normal">{Number(analysis.asFlex_l_pos) > Number(analysis.minAs) ? '(抗彎)' : '(溫度)'}</span>
+                                     </div>
+                                  </>
+                               )}
+                            </div>
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+                 </div>
+               </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <RebarSelector label="短向頂層 (-)" size={slab.stSize} spacing={slab.stSpacing} setSize={(v) => onUpdate(slab.id, 'stSize', v)} setSpacing={(v) => onUpdate(slab.id, 'stSpacing', v)} reqAs={analysis.reqAs_s_neg} providedAs={analysis.asSTop} isMain={true} />
+                <RebarSelector label="短向底層 (+)" size={slab.sbSize} spacing={slab.sbSpacing} setSize={(v) => onUpdate(slab.id, 'sbSize', v)} setSpacing={(v) => onUpdate(slab.id, 'sbSpacing', v)} reqAs={analysis.reqAs_s_pos} providedAs={analysis.asSBot} isMain={true} />
+                <RebarSelector label="長向頂層 (-)" size={slab.ltSize} spacing={slab.ltSpacing} setSize={(v) => onUpdate(slab.id, 'ltSize', v)} setSpacing={(v) => onUpdate(slab.id, 'ltSpacing', v)} reqAs={analysis.reqAs_l_neg} providedAs={analysis.asLTop} isMain={false} />
+                <RebarSelector label="長向底層 (+)" size={slab.lbSize} spacing={slab.lbSpacing} setSize={(v) => onUpdate(slab.id, 'lbSize', v)} setSpacing={(v) => onUpdate(slab.id, 'lbSpacing', v)} reqAs={analysis.reqAs_l_pos} providedAs={analysis.asLBot} isMain={false} />
+              </div>
+
+              <div className="lg:col-span-5 flex items-stretch">
+                <SlabCrossSection />
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ---------------------------------------------------------------------------
+    // 主應用程式 (支援多樓板、存檔與讀取)
+    // ---------------------------------------------------------------------------
+    const getDefaultSlab = (index) => ({
+      id: Date.now() + index,
+      name: `樓板 S${index}`,
+      fc: 280, fy: 4200,
+      longSide: 600, shortSide: 400, thickness: 15,
+      sdl: 150, ll: 200,
+      supportType: 'l/24', 
+      twoWayCondition: '0', // 新增邊界條件 0:內格間
+      alphaFm: 2.5,        
+      stSize: '13', stSpacing: 15,
+      sbSize: '13', sbSpacing: 15,
+      ltSize: '10', ltSpacing: 20,
+      lbSize: '10', lbSpacing: 20,
+    });
+
+    function SlabDesignApp() {
+      const [slabs, setSlabs] = useState([getDefaultSlab(1)]);
+
+      const addSlab = () => {
+        setSlabs([...slabs, getDefaultSlab(slabs.length + 1)]);
+      };
+
+      const removeSlab = (idToRemove) => {
+        setSlabs(slabs.filter(slab => slab.id !== idToRemove));
+      };
+
+      const updateSlab = (id, field, value) => {
+        setSlabs(prevSlabs => prevSlabs.map(slab => 
+          slab.id === id ? { ...slab, [field]: value } : slab
+        ));
+      };
+
+      const handleSave = () => {
+        const jsonString = JSON.stringify(slabs, null, 2);
+        const blob = new Blob([jsonString], { type: "application/json" });
+        const href = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = href;
+        link.download = `SlabDesign_Backup.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      const handleLoad = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const data = JSON.parse(e.target.result);
+            if (Array.isArray(data) && data.length > 0) {
+              const refreshedData = data.map((item, i) => ({ ...item, id: Date.now() + i }));
+              setSlabs(refreshedData);
+            } else {
+              alert("檔案格式錯誤或內容為空！");
+            }
+          } catch (err) {
+            alert("檔案讀取失敗，請確認是否為正確的 JSON 格式！");
+          }
+        };
+        reader.readAsText(file);
+        event.target.value = null; 
+      };
+
+      const handlePrint = () => {
+        window.print();
+      };
+
+      return (
+        <div className="max-w-6xl mx-auto px-4 md:px-6 space-y-4 py-6">
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-wrap justify-between items-center gap-4">
+            <div className="flex items-center gap-3">
+              <Calculator className="text-blue-700 w-6 h-6" />
+              <h1 className="text-lg font-bold text-gray-800">RC 樓板設計檢核表單</h1>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-2 print-hidden">
+              <label className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg text-sm font-semibold transition shadow-sm cursor-pointer">
+                <FolderOpen className="w-4 h-4" /> 載入舊檔
+                <input type="file" accept=".json" className="hidden" onChange={handleLoad} />
+              </label>
+              <button 
+                onClick={handleSave}
+                className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-sm font-semibold transition shadow-sm"
+              >
+                <Save className="w-4 h-4" /> 儲存現況
+              </button>
+              <button 
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-sm font-semibold transition shadow-sm"
+              >
+                <Printer className="w-4 h-4" /> 列印 PDF
+              </button>
+              <span className="w-px h-6 bg-gray-300 mx-1"></span>
+              <button 
+                onClick={addSlab}
+                className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-semibold transition shadow-sm"
+              >
+                <Plus className="w-4 h-4" /> 新增樓板
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {slabs.map((slab, index) => (
+              <SlabCard 
+                key={slab.id} 
+                slab={slab} 
+                index={index} 
+                onUpdate={updateSlab}
+                onRemove={removeSlab} 
+              />
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<SlabDesignApp />);
+  </script>
+</body>
+</html>
